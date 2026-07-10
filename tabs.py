@@ -1,4 +1,3 @@
-
 from db import DB
 from stock_service import StockService
 from delete_stock import DeleteStockScreen
