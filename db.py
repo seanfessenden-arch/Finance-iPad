@@ -1,13 +1,7 @@
 #!/bin/python
 
 import sqlite3 as lite
-from enum import Enum
-
-class TransactionType(str, Enum):
-    BUY = "BUY"
-    SELL = "SELL"
-    DIVIDEND = "DIVIDEND"
-    SPLIT = "SPLIT"
+import enums
 
 class DB:
 

@@ -9,7 +9,11 @@ Row 4: spacer
 Row 5: DataTable (spans full width, edge to edge)
 Row 6: Static text with a border box (spans full width)
 """
-from tabs import StockTab, PortfolioTab
+from stocks_tab import StockTab
+from portfolio_tab import PortfolioTab
+from sectors_tab import SectorsTab
+
+import traceback
 
 from textual.binding import Binding
 from textual.app import App, ComposeResult
@@ -43,4 +47,11 @@ class FinanceApp(App):
         self.stock_tab.query_one("#add-btn", Button).press()
             
 if __name__ == "__main__":
-    FinanceApp().run()
+    try:
+        FinanceApp().run()
+    except Exception as e:
+        tb = traceback.extract_tb(e.__traceback__)
+        last_frame = tb[-1]
+        file_name = last_frame.filename
+        line_number = last_frame.lineno
+        print(f"Error: {file_name} - Line {line_number}")

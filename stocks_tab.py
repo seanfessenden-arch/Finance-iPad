@@ -1,8 +1,7 @@
 from db import DB
 from stock_service import StockService
 from delete_stock import DeleteStockScreen
-
-from enum import Enum
+from enums import Mode, Cache 
 
 from textual import on
 from textual.screen import ModalScreen
@@ -13,19 +12,6 @@ from textual.widgets import (
         Label, Input, Button, Footer,
         Header, DataTable, Static, 
         TabbedContent, TabPane)
-
-class Mode(Enum):
-    NORMAL = 0
-    ADD = 1
-    DELETE = 2
-
-class PortfolioTab(TabPane):
-    def __init__(self):
-        super().__init__("Portfolio", id="portfolio")
-
-    def compose(self) -> ComposeResult:
-        yield Label("Name:", id="row1-label")
-#end class PortfolioTab
 
 class StockTab(TabPane):
     BINDINGS = [
@@ -118,7 +104,7 @@ class StockTab(TabPane):
             return
         self.db.delete_stock(sel_ticker)
         self.refresh_stock_list()
-        self.query_one("#stck_status", Static).update(
+        self.query_one("#footer-box", Static).update(
             f"{sel_ticker} : Deleted"
         )
 #end delete stock
@@ -135,8 +121,9 @@ class StockTab(TabPane):
         if event.button.id == "add-btn":
             name = self.query_one("#name-input", Input).value
             ticker = self.query_one("#value-input", Input).value
+            self.db.add_stock(ticker.upper(), name.upper())
             footer = self.query_one("#footer-box", Static)
-            footer.update(f"Status: Submitted '{name}' = '{ticker}'")
+            footer.update(f"Added: '{name}', '{ticker}'")
+            self.query_one("#name-input", Input).value = ""
+            self.query_one("#value-input", Input).value = ""
         self.refresh_stock_list()
-
-
