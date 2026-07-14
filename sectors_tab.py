@@ -6,10 +6,31 @@ from dateutil.relativedelta import relativedelta
 import yfinance as yf
 import pandas as pd
 
-class SectorsTab:
+from rich.text import Text
+from textual import on
+from textual.screen import ModalScreen
+from textual.binding import Binding
+from textual.app import App, ComposeResult
+from textual.containers import Grid, Vertical
+from textual.widgets import Label, TabPane, DataTable
+
+class SectorsTab(TabPane):
+    BINDINGS = [
+            Binding("ctrl+q", "quit", "Quit"),
+            ]
     def __init__(self):
+        super().__init__("Sectors", id="sectors")
         self.USE_CACHE = True
         self.today = datetime.now()
+
+            #"FCYIX":"Industrials",
+        self.sectors = {
+            "FSELX":"Semiconductors",
+            "FSPTX":"Technology",
+            "FSENX":"Energy",
+            "FSPHX":"Health Care",
+            "FIDSX":"Financial Services"
+        }
 
         self.dates = {
 	        "CURRENT": self.today,
@@ -20,6 +41,39 @@ class SectorsTab:
 	        "15Y": self.today - relativedelta(years=15),
 	        "20Y": self.today - relativedelta(years=20),
         }
+
+    def compose(self) -> ComposeResult:
+        yield Label("Sector Section")
+        yield DataTable(id="sector-table")
+
+    def on_mount(self):
+        sector_tbl = self.query_one("#sector-table", DataTable)
+        sector_tbl.cursor_type = "row"
+        sector_tbl.zebra_stripes=True
+        #sector_tbl.add_columns(
+        sector_tbl.add_column("Sector (Symbol)", key="col1")
+        sector_tbl.add_column(Text("YTD", justify="right"), key="col2")
+        sector_tbl.add_column(Text("1 Yr", justify="right"), key="col3")
+        sector_tbl.add_column(Text("5 Yr", justify="right"), key="col4")
+        sector_tbl.add_column(Text("10 Yr", justify="right"), key="col5")
+        sector_tbl.add_column(Text("15 Yr", justify="right"), key="col6")
+        sector_tbl.add_column(Text("20 Yr", justify="right"), key="col7")
+
+        for index, col in enumerate(sector_tbl.columns.values()):
+            col.auto_width = False
+
+            col.width = 27 if index==0 else 9
+
+        sector_tbl.refresh()
+
+        self.build_table()
+#end on mount
+
+    def build_table(self):
+        sector_tbl = self.query_one("#sector-table", DataTable)
+        sector_tbl.clear()
+        for sector in self.sectors:
+            self.show_hist_data(sector)
 
     def price_on_or_after(self, hist, target):
         mask = hist.index >= target
@@ -59,7 +113,6 @@ class SectorsTab:
         return hist
     #end get history
 
-
     def show_hist_data(self, symbol):
         prices = {}
         hist = self.get_history(symbol)
@@ -82,38 +135,18 @@ class SectorsTab:
             past = prices[period]["price"]
             returns[period] = (current - past) / past * 100
 
-        print(
-            f"{symbol:<8}"
-            f"{returns['YTD']:>8.1f}%"
-            f"{returns['1Y']:>8.1f}%"
-            f"{returns['5Y']:>8.1f}%"
-            f"{returns['10Y']:>8.1f}%"
-            f"{returns['15Y']:>8.1f}%"
+        sector_tbl = self.query_one("#sector-table", DataTable)
+        sector_tbl.add_row(
+            f"{self.sectors[symbol]} ({symbol})",
+            f"{returns['YTD']:>8.1f}%",
+            f"{returns['1Y']:>8.1f}%",
+            f"{returns['5Y']:>8.1f}%",
+            f"{returns['10Y']:>8.1f}%",
+            f"{returns['15Y']:>8.1f}%",
             f"{returns['20Y']:>8.1f}%"
         )
 
 def main():
-    my_sectors = Sectors()
-    print(
-	    f"{'Symbol':<8}"
-	    f"{'YTD':>10}"
-	    f"{'1Y':>10}"
-	    f"{'5Y':>10}"
-	    f"{'10Y':>10}"
-	    f"{'15Y':>10}"
-	    f"{'20Y':>10}"
-    )
-
-    print("-" * 68)
-
-    sectors = {
-            "FSELX":"Semiconductors",
-            "FSPTX":"Technology",
-            "FSENX":"Energy",
-            "FSPHX":"Health Care",
-            "FCYIX":"Industrials",
-            "FIDSX":"Financial Services"
-    }
     for symbol in sectors.keys():
         print(sectors[symbol])
         try:

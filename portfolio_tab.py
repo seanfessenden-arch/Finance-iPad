@@ -1,17 +1,5 @@
-from db import DB
-from stock_service import StockService
-from delete_stock import DeleteStockScreen
-from enums import Mode, Cache 
-
-from textual import on
-from textual.screen import ModalScreen
-from textual.binding import Binding
-from textual.app import App, ComposeResult
-from textual.containers import Grid, Vertical
-from textual.widgets import (
-        Label, Input, Button, Footer,
-        Header, DataTable, Static, 
-        TabbedContent, TabPane)
+from textual.widgets import TabPane, Label
+from textual.app import ComposeResult
 
 class PortfolioTab(TabPane):
     def __init__(self):

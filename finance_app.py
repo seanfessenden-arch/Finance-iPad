@@ -35,11 +35,13 @@ class FinanceApp(App):
         super().__init__()
         self.stock_tab = StockTab()
         self.portfolio_tab = PortfolioTab()
+        self.sectors_tab = SectorsTab()
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with TabbedContent():
             yield self.stock_tab
+            yield self.sectors_tab
             yield self.portfolio_tab
         yield Footer()
 

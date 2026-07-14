@@ -30,17 +30,41 @@ Grid {
         content-align: center middle;
         height: 100%;
     }
-#dialog {
-	width: 40;
-	height: auto;
 
-	padding: 1 2;
-	border: thick $primary;
-	background: $surface;
+/* This is for the stock delete confirmation dialog */
+# DEFAULT_CSS directly binds the styling to this widget class
+    QuitModal {
+        /* Align child container to exact screen center */
+        align: center middle;
+        background: rgba(0, 0, 0, 0.5);
+    }
 
-	align-horizontal: center;
-}
+    #dialog {
+        /* Strict sizing for the container */
+        width: 85%;
+        max-width: 60;
+        height: 11;
+        
+        /* Box styling 
+        border: thick $primary; round, dashed, panel ascii  */
+        border: ascii green;  /* Or: #ff007f, $accent, $success, etc. */
+        background: $surface;
+        padding: 1 2;
+    }
 
-ModalScreen {
-	align: center middle;
-}
+    #question {
+        width: 100%;
+        height: 3;
+        content-align: center middle;
+    }
+
+    #buttons {
+        width: 100%;
+        height: auto;
+        align: center middle;
+    }
+
+    Button {
+        margin: 0 2;
+        width: 12;
+    }

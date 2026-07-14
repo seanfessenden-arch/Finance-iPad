@@ -1,23 +1,23 @@
 from textual import on
-from textual.widgets import Button, Static
-from textual.containers import Horizontal, Vertical
+from textual.app import ComposeResult
+from textual.widgets import Button, Static, Label
+from textual.containers import Horizontal, Vertical, Container
 from textual.screen import ModalScreen
 class DeleteStockScreen(ModalScreen[bool]):
 
-	def __init__(self, symbol: str):
-		super().__init__()
-		self.symbol = symbol
+    def __init__(self, symbol: str):
+        super().__init__()
+        self.symbol = symbol
 
-	def compose(self):
-		with Vertical(id="dialog"):
-			yield Static(f"Delete {self.symbol}?")
-			with Horizontal():
-				yield Button("Yes", id="yes", variant="error")
-				yield Button("No", id="no")
+    def compose(self) -> ComposeResult:
+        with Container(id="dialog"):
+            yield Label(f"Delete {self.symbol}?", id="question")
+            with Horizontal(id="buttons"):
+                yield Button("Yes", id="yes", variant="error")
+                yield Button("No", id="no", variant="primary")
 
-	@on(Button.Pressed)
-	def button_pressed(self, event: Button.Pressed):
-		if event.button.id == "yes":
-			self.dismiss(True)
-		else:
-			self.dismiss(False)
+    @on(Button.Pressed)
+    def button_pressed(self, event: Button.Pressed):
+        # Dismiss and return True if 'yes', False otherwise
+        self.dismiss(event.button.id == "yes")
+
