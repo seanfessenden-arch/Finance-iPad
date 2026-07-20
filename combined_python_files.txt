@@ -1,0 +1,1078 @@
+================================================================================
+FILE: combined_python_files.txt
+================================================================================
+
+
+
+================================================================================
+FILE: db.py
+================================================================================
+
+#!/bin/python
+
+import sqlite3 as lite
+import enums
+
+class DB:
+
+    def __init__(self, name: str) -> None:
+        """
+        Open a connection to the database.
+        """
+
+        self.name = name
+        self.conn = lite.connect(name)
+        self.conn.execute(
+            "PRAGMA foreign_keys = ON"
+            )
+        self.cursor = self.conn.cursor()
+        self.create_tables()
+
+#Functions for Context Manager Support
+    def __enter__(self):
+        return self
+
+    def __exit__(
+    	self,
+    	exc_type,
+    	exc_val,
+    	exc_tb
+		):
+    	self.close()
+#end init
+
+    def create_tables(self):
+        """
+        Create all required tables.
+        """
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS stocks(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT UNIQUE,
+            name TEXT
+        );
+        """)
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS stock_prices(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stock_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            high REAL,
+            low REAL,
+            last_price REAL,
+
+            FOREIGN KEY (stock_id)
+            REFERENCES Stocks(id)
+            ON DELETE CASCADE
+
+            UNIQUE(stock_id, date)
+        );
+        """)
+
+        self.cursor.execute("""
+		CREATE TABLE IF NOT EXISTS transactions(
+    	id INTEGER PRIMARY KEY AUTOINCREMENT,
+    	stock_id INTEGER NOT NULL,
+    	transaction_type TEXT NOT NULL,
+    	quantity REAL NOT NULL,
+    	price REAL NOT NULL,
+    	date TEXT NOT NULL,
+
+    	FOREIGN KEY (stock_id)
+        REFERENCES stocks(id)
+        ON DELETE CASCADE
+		);
+        """)
+
+# Index for looking up latest prices
+        self.cursor.execute("""
+    	CREATE INDEX IF NOT EXISTS
+    	idx_stockprices_stock_date
+    	ON stock_prices(stock_id, date);
+    	""")
+
+# Index for joining positions to stocks
+        self.cursor.execute("""
+    	CREATE INDEX IF NOT EXISTS
+    	idx_transactions_stock
+    	ON transactions(stock_id);
+    	""")
+
+
+        self.conn.commit()
+#end create tables
+
+    def add_stock(self, symbol: str, name: str)-> None:
+        """
+        Add a stock symbol.
+        Ignore duplicates.
+        """
+
+        print(f"Adding stock info: {symbol=}, {name=}")
+
+        self.cursor.execute("""
+        INSERT OR IGNORE INTO Stocks
+        (
+            symbol,
+            name
+        )
+        VALUES (?, ?)
+        """, (symbol, name))
+
+        print(f"Rows affected: {self.cursor.rowcount}")
+        self.conn.commit()
+#end add stock
+
+    def delete_stock(self, symbol: str)-> None:
+        """
+        Delete a stock .
+        """
+
+        print(f"Deleting stock info: {symbol=}")
+
+        self.cursor.execute("""
+        DELETE FROM Stocks
+        where  symbol = ?
+        """, (symbol,))
+
+        print(f"Rows affected: {self.cursor.rowcount}")
+        self.conn.commit()
+#end delete stock
+
+    def get_stock_id(self, symbol):
+    	self.cursor.execute("""
+    	SELECT id
+    	FROM Stocks
+    	WHERE symbol = ?
+		""", (symbol,))
+
+    	row = self.cursor.fetchone()
+
+    	if row is None:
+        	raise ValueError(
+            f"Stock symbol '{symbol}' not found"
+        	)
+
+    	return row[0]
+#end get stock id
+
+
+    def add_transaction(
+        self,
+        symbol,
+        transaction_type,
+        quantity,
+        price,
+        date
+    ):
+        """
+        Add a transaction for a stock.
+        """
+
+        stock_id = self.get_stock_id(symbol)
+
+        self.cursor.execute("""
+        INSERT INTO transactions
+        (
+            stock_id,
+            transaction_type,
+            quantity,
+            price,
+            date
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """, (
+            stock_id,
+            transaction_type,
+            quantity,
+            price,
+            date
+        ))
+
+        self.conn.commit()
+
+    def add_stock_price(
+        self,
+        symbol,
+        date,
+        high,
+        low,
+        last_price
+    ):
+        """
+        Add daily pricing information.
+        """
+
+        stock_id = self.get_stock_id(symbol)
+
+        self.cursor.execute("""
+        INSERT OR REPLACE INTO stock_prices
+        (
+            stock_id,
+            date,
+            high,
+            low,
+            last_price
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """, (
+            stock_id,
+            date,
+            high,
+            low,
+            last_price
+        ))
+
+        self.conn.commit()
+
+    def get_stock_list(self):
+        """
+        Return all stocks.
+        """
+
+        self.cursor.execute("""
+        SELECT
+            symbol,
+            name
+        FROM Stocks
+        ORDER BY symbol
+        """)
+
+        return self.cursor.fetchall()
+
+    def get_transactions(self, symbol=None):
+        """
+        Return one transaction or all transactions.
+        """
+        if symbol is None:
+
+            self.cursor.execute("""
+            SELECT
+                s.symbol,
+                p.quantity,
+                p.price,
+                p.date
+            FROM transactions p
+            JOIN Stocks s
+                ON p.stock_id = s.id
+            ORDER BY s.symbol
+            """)
+
+            return self.cursor.fetchall()
+
+        self.cursor.execute("""
+        SELECT
+            s.symbol,
+            p.quantity,
+            p.price,
+            p.date
+        FROM transactions p
+        JOIN Stocks s
+            ON p.stock_id = s.id
+        WHERE s.symbol = ?
+        """, (symbol,))
+
+        return self.cursor.fetchone()
+
+    def get_transaction_values(self):
+        """
+        Return current transaction values
+        and transaction total.
+
+        Uses the most recent pricing
+        record for each stock.
+        """
+
+        self.cursor.execute("""
+        SELECT
+            s.symbol,
+            p.quantity,
+            p.price,
+            sp.last_price,
+
+            (p.quantity * sp.last_price)
+                AS current_value,
+
+            ((sp.last_price - p.price)
+                * p.quantity)
+                AS gain_loss
+
+        FROM transactions p
+
+        JOIN stocks s
+            ON p.stock_id = s.id
+
+        JOIN stock_prices sp
+            ON sp.stock_id = s.id
+
+        WHERE sp.date =
+        (
+            SELECT MAX(sp2.date)
+            FROM stock_prices sp2
+            WHERE sp2.stock_id = s.id
+        )
+
+        ORDER BY current_value DESC
+        """)
+
+        rows = self.cursor.fetchall()
+
+        total_value = sum(
+            row[4]
+            for row in rows
+        )
+
+        return rows, total_value
+
+    def drop_tables(self):
+        """
+        Drop all tables.
+        """
+
+        print("Dropping tables...")
+
+        self.cursor.execute(
+            "DROP TABLE IF EXISTS transactions"
+        )
+
+        self.cursor.execute(
+            "DROP TABLE IF EXISTS stock_prices"
+        )
+
+        self.cursor.execute(
+            "DROP TABLE IF EXISTS stocks"
+        )
+
+        self.conn.commit()
+
+        return "Tables Dropped"
+
+    def close(self):
+        """
+        Close the database connection.
+        """
+
+        self.conn.close()
+
+if __name__ == '__main__':
+    symbol = 'FPURX'
+    symbol2 = 'ECHO'
+    date ='2026-06-24'
+    high= 12.34
+    low= 11.34
+    last_price= 13.34
+    quantity=563
+    purchase_price= 9.85
+    purchase_dt='2025-04-23'
+
+    try:
+        with DB("test.db") as db:
+            db.drop_tables()
+            db.create_tables()
+            db.add_stock( symbol, "Puritan fund")
+            db.add_stock( symbol2, "Echostar")
+            db.add_stock( 'CVNA', "Carvana")
+
+            for row in db.get_stock_list():
+                print(f"{row=}")
+
+            db.delete_stock(symbol2)
+
+            db.add_stock_price(symbol, date, high, low, last_price)
+            db.add_stock_price("CVNA", date, high, low, last_price)
+            db.add_transaction( symbol, "BUY", quantity, purchase_price, purchase_dt)
+            db.add_transaction( 'CVNA', "BUY", 13, 10.2, '2026-06-30')
+            rows, tval = db.get_transaction_values()
+            print("####")
+            print(f"{rows}, total value is {tval}")
+            print("####")
+
+            transactions = db.get_transactions('FPURX')
+            print(f"{transactions=}")
+    except ValueError as e:
+        print(e)
+
+
+================================================================================
+FILE: delete_stock.py
+================================================================================
+
+from textual import on
+from textual.app import ComposeResult
+from textual.widgets import Button, Static, Label
+from textual.containers import Horizontal, Vertical, Container
+from textual.screen import ModalScreen
+class DeleteStockScreen(ModalScreen[bool]):
+
+    def __init__(self, symbol: str):
+        super().__init__()
+        self.symbol = symbol
+
+    def compose(self) -> ComposeResult:
+        with Container(id="dialog"):
+            yield Label(f"Delete {self.symbol}?", id="question")
+            with Horizontal(id="buttons"):
+                yield Button("Yes", id="yes", variant="error")
+                yield Button("No", id="no", variant="primary")
+
+    @on(Button.Pressed)
+    def button_pressed(self, event: Button.Pressed):
+        # Dismiss and return True if 'yes', False otherwise
+        self.dismiss(event.button.id == "yes")
+
+
+
+================================================================================
+FILE: enums.py
+================================================================================
+
+from enum import Enum
+
+class Mode(Enum):
+    NORMAL = 0
+    ADD = 1
+    DELETE = 2
+
+class Cache(Enum):
+    SECTOR = 0
+    PRICES = 1
+    HISTORY = 2
+
+class TransactionType(str, Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+    DIVIDEND = "DIVIDEND"
+    SPLIT = "SPLIT"
+
+
+================================================================================
+FILE: finance_app.py
+================================================================================
+
+#!/bin/python3
+"""
+Textual Grid layout example.
+
+Row 1: Label + Input
+Row 2: Label + Input
+Row 3: Button (spans full width)
+Row 4: spacer
+Row 5: DataTable (spans full width, edge to edge)
+Row 6: Static text with a border box (spans full width)
+"""
+from stocks_tab import StockTab
+from portfolio_tab import PortfolioTab
+from sectors_tab import SectorsTab
+
+import traceback
+
+from textual.binding import Binding
+from textual.app import App, ComposeResult
+from textual.containers import Grid, Vertical
+from textual.widgets import (
+        Label, Input, Button, Footer,
+        Header, DataTable, Static, 
+        TabbedContent, TabPane)
+
+
+class FinanceApp(App):
+    CSS_PATH = "finance_app.tcss" 
+    ENABLE_COMMAND_PALETTE = False
+    BINDINGS = [
+            Binding("ctrl+q", "quit", "Quit")
+            ]
+
+    def __init__(self):
+        super().__init__()
+        self.stock_tab = StockTab()
+        self.portfolio_tab = PortfolioTab()
+        self.sectors_tab = SectorsTab()
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        with TabbedContent():
+            yield self.stock_tab
+            yield self.sectors_tab
+            yield self.portfolio_tab
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.stock_tab.query_one("#add-btn", Button).press()
+            
+if __name__ == "__main__":
+    try:
+        FinanceApp().run()
+    except Exception as e:
+        tb = traceback.extract_tb(e.__traceback__)
+        last_frame = tb[-1]
+        file_name = last_frame.filename
+        line_number = last_frame.lineno
+        print(f"Error: {file_name} - Line {line_number}")
+
+
+================================================================================
+FILE: finance_app.tcss
+================================================================================
+
+Grid {
+        grid-size: 2 6;        /* 2 columns, 6 rows */
+        grid-columns: auto 1fr;
+        grid-rows: 3 3 3 1 1fr 3;
+        padding: 1 2;
+    }
+
+#row1-label, #row2-label {
+        content-align: right middle;
+        padding-right: 1;
+    }
+
+    #add-btn {
+        column-span: 2;
+        width: 100%;
+    }
+
+    #spacer {
+        column-span: 2;
+    }
+
+    #fund-table {
+        column-span: 2;
+        height: 100%;
+    }
+
+    #footer-box {
+        column-span: 2;
+        border: round $accent;
+        content-align: center middle;
+        height: 100%;
+    }
+
+/* This is for the stock delete confirmation dialog */
+# DEFAULT_CSS directly binds the styling to this widget class
+    QuitModal {
+        /* Align child container to exact screen center */
+        align: center middle;
+        background: rgba(0, 0, 0, 0.5);
+    }
+
+    #dialog {
+        /* Strict sizing for the container */
+        width: 85%;
+        max-width: 60;
+        height: 11;
+        
+        /* Box styling 
+        border: thick $primary; round, dashed, panel ascii  */
+        border: ascii green;  /* Or: #ff007f, $accent, $success, etc. */
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #question {
+        width: 100%;
+        height: 3;
+        content-align: center middle;
+    }
+
+    #buttons {
+        width: 100%;
+        height: auto;
+        align: center middle;
+    }
+
+    Button {
+        margin: 0 2;
+        width: 12;
+    }
+
+
+================================================================================
+FILE: portfolio_tab.py
+================================================================================
+
+from textual.widgets import TabPane, Label
+from textual.app import ComposeResult
+
+class PortfolioTab(TabPane):
+    def __init__(self):
+        super().__init__("Portfolio", id="portfolio")
+
+    def compose(self) -> ComposeResult:
+        yield Label("Name:", id="row1-label")
+#end class PortfolioTab
+
+
+
+================================================================================
+FILE: sectors_tab.py
+================================================================================
+
+#!/bin/python3
+
+from datetime import datetime
+from pathlib import Path
+from dateutil.relativedelta import relativedelta
+import yfinance as yf
+import pandas as pd
+
+from rich.text import Text
+from textual import on
+from textual.screen import ModalScreen
+from textual.binding import Binding
+from textual.app import App, ComposeResult
+from textual.containers import Grid, Vertical
+from textual.widgets import Label, TabPane, DataTable
+
+from time_to_die import TimeToDie
+
+class SectorsTab(TabPane):
+    BINDINGS = [
+            Binding("ctrl+q", "quit", "Quit"),
+            ]
+    def __init__(self):
+        super().__init__("Sectors", id="sectors")
+        self.USE_CACHE = True
+        self.today = datetime.now()
+
+            #"FCYIX":"Industrials",
+        self.sectors = {
+            "FSELX":"Semiconductors",
+            "FSPTX":"Technology",
+            "FSENX":"Energy",
+            "FSPHX":"Health Care",
+            "FIDSX":"Financial Services"
+        }
+
+        self.dates = {
+	        "CURRENT": self.today,
+	        "YTD": datetime(self.today.year, 1, 1),
+	        "1Y": self.today - relativedelta(years=1),
+	        "5Y": self.today - relativedelta(years=5),
+	        "10Y": self.today - relativedelta(years=10),
+	        "15Y": self.today - relativedelta(years=15),
+	        "20Y": self.today - relativedelta(years=20),
+        }
+
+    def compose(self) -> ComposeResult:
+        yield Label("Sector Section")
+        yield DataTable(id="sector-table")
+
+    def on_mount(self):
+        sector_tbl = self.query_one("#sector-table", DataTable)
+        sector_tbl.cursor_type = "row"
+        sector_tbl.zebra_stripes=True
+        #sector_tbl.add_columns(
+        sector_tbl.add_column("Sector (Symbol)", key="col1")
+        sector_tbl.add_column(Text("YTD", justify="right"), key="col2")
+        sector_tbl.add_column(Text("1 Yr", justify="right"), key="col3")
+        sector_tbl.add_column(Text("5 Yr", justify="right"), key="col4")
+        sector_tbl.add_column(Text("10 Yr", justify="right"), key="col5")
+        sector_tbl.add_column(Text("15 Yr", justify="right"), key="col6")
+        sector_tbl.add_column(Text("20 Yr", justify="right"), key="col7")
+
+        for index, col in enumerate(sector_tbl.columns.values()):
+            col.auto_width = False
+
+            col.width = 27 if index==0 else 9
+
+        sector_tbl.refresh()
+
+        self.build_table()
+#end on mount
+
+    def build_table(self):
+        sector_tbl = self.query_one("#sector-table", DataTable)
+        sector_tbl.clear()
+        for sector in self.sectors:
+            self.show_hist_data(sector)
+
+    def price_on_or_after(self, hist, target):
+        mask = hist.index >= target
+
+        if not mask.any():
+            return None
+
+        row = hist.loc[mask].iloc[0]
+
+        return {
+            "date": row.name.date(),
+            "price": row["Close"],
+        }
+    #end price on or after
+
+    def get_history(self, symbol):
+        ttd = TimeToDie()
+        cache_file = Path(f"{symbol}.json")
+
+        if not ttd.cache_expired('SECTOR') and cache_file.exists():
+            hist = pd.read_json(
+                cache_file,
+                orient="table"
+            )
+        else:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period="max", auto_adjust=True)
+            hist.to_json(
+                cache_file,
+                orient="table",
+                date_format="iso"
+    )
+
+        # Always make the index timezone-naive
+        if hist.index.tz is not None:
+            hist.index = hist.index.tz_localize(None)
+        return hist
+    #end get history
+
+    def show_hist_data(self, symbol):
+        prices = {}
+        hist = self.get_history(symbol)
+
+        for period, target in self.dates.items():
+            if period == "CURRENT":
+                row = hist.iloc[-1]
+                prices[period] = {
+                "date": row.name.date(),
+                "price": row["Close"],
+                }
+            else:
+                prices[period] = self.price_on_or_after(hist, target)
+
+        returns = {}
+
+        current = prices["CURRENT"]["price"]
+
+        for period in ("YTD", "1Y", "5Y", "10Y", "15Y", "20Y"):
+            past = prices[period]["price"]
+            returns[period] = (current - past) / past * 100
+
+        sector_tbl = self.query_one("#sector-table", DataTable)
+        sector_tbl.add_row(
+            f"{self.sectors[symbol]} ({symbol})",
+            f"{returns['YTD']:>8.1f}%",
+            f"{returns['1Y']:>8.1f}%",
+            f"{returns['5Y']:>8.1f}%",
+            f"{returns['10Y']:>8.1f}%",
+            f"{returns['15Y']:>8.1f}%",
+            f"{returns['20Y']:>8.1f}%"
+        )
+
+def main():
+    for symbol in sectors.keys():
+        print(sectors[symbol])
+        try:
+            my_sectors.show_hist_data(symbol)
+        except Exception as e:
+            print(str(e))
+
+if __name__ == "__main__":
+    main()
+
+
+
+================================================================================
+FILE: stock_service.py
+================================================================================
+
+#!/bin/python3
+import time
+import yfinance as yf
+
+class StockService:
+    def __init__(self, ttl=60):
+        self.ttl = ttl
+        self._cache = {}  
+        # symbol -> (price, timestamp)
+
+    def _fetch_price(self, symbol):
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="2d")
+
+        if data.empty:
+            {}
+
+        row = data.iloc[-1]
+
+        return {
+            "date": row.name.strftime("%Y-%m-%d"),
+            "high": float(row["High"]),
+            "low": float(row["Low"]),
+            "close": float(row["Close"]),
+        }
+#end _fetch_price
+
+    def price(self, symbol):
+        """
+        Retrieve the most recent daily
+        pricing information.
+
+        Returns a dictionary containing:
+            date
+            high
+            low
+            close
+
+        Returns an empty dictionary if 
+        no pricing data exists.
+        """
+        now = time.time()
+
+		# ---- cache hit (FAST PATH) ----
+        if symbol in self._cache:
+            price, ts = self._cache[symbol]
+
+			# still fresh → return immediately
+            if now - ts < self.ttl:
+                return price
+
+			# stale but usable → return old value first (IMPORTANT for UI)
+            stale_price = price
+        else:
+            stale_price = None
+
+		# ---- refresh happens ONLY when called ----
+        try:
+            price = self._fetch_price(symbol)
+        except Exception:
+			# if API fails, fallback to stale value
+            return stale_price
+
+        if price is None:
+             stale_price
+
+        self._cache[symbol] = (price, now)
+        return price
+
+
+if __name__ == '__main__':
+    ss = StockService()
+    price = ss.price('CVNA')
+    print(f'{price=}')
+
+    for i in range(5):
+        print(f"sleeping...{i}")
+        time.sleep(1)
+    price = ss.price('CVNA')
+    print(f'{price=}')
+
+
+================================================================================
+FILE: stocks_tab.py
+================================================================================
+
+from db import DB
+from stock_service import StockService
+from delete_stock import DeleteStockScreen
+from enums import Mode, Cache 
+
+from textual import on
+from textual.screen import ModalScreen
+from textual.binding import Binding
+from textual.app import App, ComposeResult
+from textual.containers import Grid, Vertical
+from textual.widgets import (
+        Label, Input, Button, Footer,
+        Header, DataTable, Static, 
+        TabbedContent, TabPane)
+
+class StockTab(TabPane):
+    BINDINGS = [
+            Binding("ctrl+q", "quit", "Quit"),
+            Binding("ctrl+d", "set_del_stock", "Delete")
+            ]
+
+    def __init__(self):
+        super().__init__("Stocks", id="stocks")
+        self.db = DB("portfolio.db")
+        self.mode = Mode.NORMAL
+        self.ss = StockService()
+#end init
+
+    def on_mount(self):
+        stock_tbl = self.query_one("#fund-table", DataTable)
+        stock_tbl.cursor_type = "row"
+        stock_tbl.zebra_stripes = True
+        stock_tbl.add_columns(
+                "Symbol",
+                "Company"
+                )
+        self.refresh_stock_list()
+        # refresh the list of stocks   
+#end on_mount
+
+    def compose(self) -> ComposeResult:
+        yield Grid(
+            Label("Company:", id="row1-label"),
+            Input(placeholder="Enter company name", id="name-input"),
+
+            Label("Ticker:", id="row2-label"),
+            Input(placeholder="Enter ticker", id="value-input"),
+
+            Button("Submit", id="add-btn", variant="primary"),
+
+            Static("", id="spacer"),
+            DataTable(id="fund-table"),
+            Static("Status: Ready",id="footer-box"),
+        )
+#end compose
+
+    @on(DataTable.RowSelected, "#fund-table")
+    def on_fund_selected(self, event: DataTable.RowSelected) -> None:
+        try:
+            if self.mode == Mode.DELETE: 
+                self.delete_stock(event)
+                return
+            else:
+                self.show_stock_price(event)
+        except Exception as e:
+            self.notify(str(e))
+#end on fund selected   
+
+    def get_selected_symbol(self, event: DataTable.RowSelected):
+        table = event.data_table
+        row_data = table.get_row(event.row_key)
+        
+        # event.row_key gives the internal ID of the row
+        # row_data contains the list of values for row
+        sel_ticker = row_data[0]
+        return sel_ticker
+#end get selected symbol
+
+    def show_stock_price(self, event):
+        sel_ticker = self.get_selected_symbol(event)
+        price = self.ss.price(sel_ticker)
+        self.query_one("#footer-box", Static).update(
+        f"{sel_ticker} : ${price['close']:.2f}")
+#end show stock price
+
+    def action_set_del_stock(self):
+        self.mode = Mode.DELETE
+        self.query_one("#footer-box", Static).update(
+		"Delete Mode - Select a stock")
+
+    def delete_stock(self, event):
+            sel_ticker = self.get_selected_symbol(event)
+            self.app.push_screen(
+                DeleteStockScreen(sel_ticker),
+               lambda result: self.del_stock_db(sel_ticker, result)
+                )
+            self.mode = Mode.NORMAL
+            self.refresh_stock_list()
+#end delete stock
+
+    def del_stock_db(self, sel_ticker, confirmed: bool):
+        self.mode = Mode.NORMAL
+        if not confirmed:
+            return
+        self.db.delete_stock(sel_ticker)
+        self.refresh_stock_list()
+        self.query_one("#footer-box", Static).update(
+            f"{sel_ticker} : Deleted"
+        )
+#end delete stock
+
+    def refresh_stock_list(self):
+        table = self.query_one("#fund-table", DataTable)
+        table.clear()
+
+        for row in self.db.get_stock_list():
+            table.add_row(row[0], row[1])
+#end refresh stock list
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "add-btn":
+            name = self.query_one("#name-input", Input).value
+            ticker = self.query_one("#value-input", Input).value
+            self.db.add_stock(ticker.upper(), name.upper())
+            footer = self.query_one("#footer-box", Static)
+            footer.update(f"Added: '{name}', '{ticker}'")
+            self.query_one("#name-input", Input).value = ""
+            self.query_one("#value-input", Input).value = ""
+        self.refresh_stock_list()
+
+
+================================================================================
+FILE: time_to_die.py
+================================================================================
+
+#!/bin/python3
+
+import time
+from pathlib import Path
+import enums
+import json
+
+class TimeToDie:
+    def __init__(self):
+        self.SECTOR_CTIME = 40
+        self.PRICES_CTIME =  10
+        self.HISTORY_CTIME = 10 
+
+        self.ttd_json = "ttd.json"
+        epoch_time = time.time()
+
+        self.cache_duration = {
+            "SECTOR": int(epoch_time + self.SECTOR_CTIME),
+            "PRICES": int(epoch_time + self.PRICES_CTIME),
+            "HISTORY": int(epoch_time + self.HISTORY_CTIME),
+        }
+
+        self.init_cache_refresh_times()
+#end init
+
+    def init_cache_refresh_times(self):
+        '''
+            Take the cache expire time from the ttd.json if 
+            it exists, otherwise create one with the cache times
+            as set above
+        '''
+        cache_file = Path(self.ttd_json)
+
+        if cache_file.exists():
+            with open(self.ttd_json, "r", encoding="utf-8") as file:
+                self.cache_duration = json.load(file)
+                #print(f"{self.cache_duration}")
+        else:
+            with open(self.ttd_json, "w", encoding="utf-8") as file:
+                json.dump(self.cache_duration, file, indent=4)
+                #print("created ttd.json")
+#end init cache refresh times
+
+    def cache_expired(self, cache_name: str) -> bool:
+        with open(self.ttd_json, "r", encoding="utf-8") as file:
+            self.cache_duration = json.load(file)
+            expire_cache = self.cache_duration[cache_name]
+            if expire_cache < time.time():
+                self.reset_cache(cache_name)
+                return True
+            else:
+                return False
+#end cache expired
+
+    def reset_cache(self, cache_name: str) -> None:
+
+        cache_time = time.time() + self.SECTOR_CTIME
+
+        with open(self.ttd_json, "r+", encoding="utf-8") as file:
+            self.cache_duration = json.load(file)
+            self.cache_duration[cache_name] = cache_time
+            file.seek(0)#back to top of file
+            json.dump(self.cache_duration, file, indent=4)
+            file.close()
+    #end reset cache
+
+#end class TimeToDie
+
+def load_sector()-> None:
+	print("Dummy method for testing")
+
+if __name__ == "__main__":
+    ttd = TimeToDie()
+    if ttd.cache_expired('SECTOR'):
+        load_sector()
+        ttd.reset_cache('SECTOR')
+    else:
+        print("cache not expired")
+
+

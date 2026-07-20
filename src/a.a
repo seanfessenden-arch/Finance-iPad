@@ -1,0 +1,7 @@
+class Stock:
+    def __init__(self, id, symbol, name):
+    self.id
+    self.symbol
+    self.company_name
+
+#end class Stock

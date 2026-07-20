@@ -1,7 +1,8 @@
 #!/bin/python
 
 import sqlite3 as lite
-import enums
+from enum import Enum
+from reference import TransactionType, Stock
 
 class DB:
 
@@ -88,9 +89,12 @@ class DB:
     	idx_transactions_stock
     	ON transactions(stock_id);
     	""")
-
-
-        self.conn.commit()
+        try:
+            self.conn.commit()
+        except Exception as e:
+            return False
+        else:
+            return True
 #end create tables
 
     def add_stock(self, symbol: str, name: str)-> None:
@@ -98,9 +102,6 @@ class DB:
         Add a stock symbol.
         Ignore duplicates.
         """
-
-        print(f"Adding stock info: {symbol=}, {name=}")
-
         self.cursor.execute("""
         INSERT OR IGNORE INTO Stocks
         (
@@ -110,24 +111,32 @@ class DB:
         VALUES (?, ?)
         """, (symbol, name))
 
-        print(f"Rows affected: {self.cursor.rowcount}")
-        self.conn.commit()
+        try:
+            self.conn.commit()
+        except Exception as e:
+            return False
+        else:
+            return True
 #end add stock
 
     def delete_stock(self, symbol: str)-> None:
         """
         Delete a stock .
         """
-
-        print(f"Deleting stock info: {symbol=}")
-
         self.cursor.execute("""
         DELETE FROM Stocks
         where  symbol = ?
         """, (symbol,))
 
-        print(f"Rows affected: {self.cursor.rowcount}")
-        self.conn.commit()
+        result = False
+        if self.cursor.rowcount > 0:
+            result = True
+        try:
+            self.conn.commit()
+        except Exception as e:
+            return result
+        else:
+            return result
 #end delete stock
 
     def get_stock_id(self, symbol):
@@ -146,6 +155,23 @@ class DB:
 
     	return row[0]
 #end get stock id
+
+    def get_stock(self, symbol):
+    	self.cursor.execute("""
+    	SELECT id, symbol, name
+    	FROM Stocks
+    	WHERE symbol = ?
+		""", (symbol,))
+
+    	row = self.cursor.fetchone()
+
+    	if row is None:
+        	raise ValueError(
+            f"Stock symbol '{symbol}' not found"
+        	)
+
+    	return Stock(row[0], row[1], row[2])
+#end get stock
 
 
     def add_transaction(
@@ -363,6 +389,8 @@ if __name__ == '__main__':
             db.add_stock( symbol, "Puritan fund")
             db.add_stock( symbol2, "Echostar")
             db.add_stock( 'CVNA', "Carvana")
+            stk = db.get_stock('CVNA')
+            print(f"{stk.db_id}; {stk.symbol}; {stk.company_name}")
 
             for row in db.get_stock_list():
                 print(f"{row=}")

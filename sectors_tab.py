@@ -3,8 +3,6 @@
 from datetime import datetime
 from pathlib import Path
 from dateutil.relativedelta import relativedelta
-import yfinance as yf
-import pandas as pd
 
 from rich.text import Text
 from textual import on
@@ -14,6 +12,10 @@ from textual.app import App, ComposeResult
 from textual.containers import Grid, Vertical
 from textual.widgets import Label, TabPane, DataTable
 
+from time_to_die import TimeToDie
+from yahoo_client import YahooClient
+from helper import percent_gain
+
 class SectorsTab(TabPane):
     BINDINGS = [
             Binding("ctrl+q", "quit", "Quit"),
@@ -22,6 +24,7 @@ class SectorsTab(TabPane):
         super().__init__("Sectors", id="sectors")
         self.USE_CACHE = True
         self.today = datetime.now()
+        self.client = YahooClient()
 
             #"FCYIX":"Industrials",
         self.sectors = {
@@ -29,6 +32,7 @@ class SectorsTab(TabPane):
             "FSPTX":"Technology",
             "FSENX":"Energy",
             "FSPHX":"Health Care",
+            "FIDRX": "Industrials",
             "FIDSX":"Financial Services"
         }
 
@@ -41,6 +45,7 @@ class SectorsTab(TabPane):
 	        "15Y": self.today - relativedelta(years=15),
 	        "20Y": self.today - relativedelta(years=20),
         }
+    #end init
 
     def compose(self) -> ComposeResult:
         yield Label("Sector Section")
@@ -76,64 +81,66 @@ class SectorsTab(TabPane):
             self.show_hist_data(sector)
 
     def price_on_or_after(self, hist, target):
-        mask = hist.index >= target
 
-        if not mask.any():
-            return None
-
-        row = hist.loc[mask].iloc[0]
-
-        return {
-            "date": row.name.date(),
-            "price": row["Close"],
-        }
+        for row in hist:
+            if row["date"] >= target:
+                return {"date": row["date"].date(), "price": row["close"]}
+        return None
     #end price on or after
 
     def get_history(self, symbol):
+        '''
+        Pull full price history for a symbol via YahooClient, which
+        handles disk caching and TimeToDie-based expiry on its own.
+        Returns list of {"date": datetime, "close": float}, sorted
+        oldest to newest, with any null-close rows dropped.
+        '''
+        raw = self.client.history(symbol, range="max", interval="1d")
 
-        cache_file = Path(f"{symbol}.json")
+        hist = []
 
-        if self.USE_CACHE and cache_file.exists():
-            hist = pd.read_json(
-                cache_file,
-                orient="table"
-            )
-        else:
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="max", auto_adjust=True)
-            hist.to_json(
-                cache_file,
-                orient="table",
-                date_format="iso"
-    )
+        for row in raw:
+            if row["close"] is None:
+                continue
 
-        # Always make the index timezone-naive
-        if hist.index.tz is not None:
-            hist.index = hist.index.tz_localize(None)
+            hist.append({
+                "date": datetime.fromtimestamp(row["timestamp"]),
+                "close": row["close"],
+            })
+
+        hist.sort(key=lambda r: r["date"])
+
         return hist
     #end get history
 
     def show_hist_data(self, symbol):
-        prices = {}
         hist = self.get_history(symbol)
+
+        if not hist:
+            print(f"{symbol:<8} no data")
+            return
+
+        prices = {
+                "CURRENT": {
+                    "date": hist[-1]["date"].date(),
+                    "price": hist[-1]["close"],
+                    }
+                }
 
         for period, target in self.dates.items():
             if period == "CURRENT":
-                row = hist.iloc[-1]
-                prices[period] = {
-                "date": row.name.date(),
-                "price": row["Close"],
-                }
+                continue
             else:
                 prices[period] = self.price_on_or_after(hist, target)
-
-        returns = {}
-
         current = prices["CURRENT"]["price"]
+        returns = {}
 
         for period in ("YTD", "1Y", "5Y", "10Y", "15Y", "20Y"):
             past = prices[period]["price"]
-            returns[period] = (current - past) / past * 100
+            if past is None:
+                returns[period] = None 
+            else:
+                returns[period] = percent_gain(past, current)
 
         sector_tbl = self.query_one("#sector-table", DataTable)
         sector_tbl.add_row(

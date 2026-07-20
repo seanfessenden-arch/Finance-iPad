@@ -1,78 +1,92 @@
 #!/bin/python3
 
+import json
 import time
 from pathlib import Path
-import enums
-import json
+
 
 class TimeToDie:
-    def __init__(self):
-        self.SECTOR_CTIME = 40
-        self.PRICES_CTIME =  10
-        self.HISTORY_CTIME = 10 
 
-        self.ttd_json = "ttd.json"
-        epoch_time = time.time()
+	def __init__(self):
 
-        self.cache_duration = {
-            "SECTOR": int(epoch_time + self.SECTOR_CTIME),
-            "PRICES": int(epoch_time + self.PRICES_CTIME),
-            "HISTORY": int(epoch_time + self.HISTORY_CTIME),
-        }
+		self.ttd_json = Path("ttd.json")
 
-        self.init_cache_refresh_times()
-#end init
+		self.cache_times = {
+			"SECTOR": 40,
+			"PRICES": 10,
+			"HISTORY": 10,
+		}
 
-    def init_cache_refresh_times(self):
-        '''
-            Take the cache expire time from the ttd.json if 
-            it exists, otherwise create one with the cache times
-            as set above
-        '''
-        cache_file = Path(self.ttd_json)
+		self.cache_duration = {}
 
-        if cache_file.exists():
-            with open(self.ttd_json, "r", encoding="utf-8") as file:
-                self.cache_duration = json.load(file)
-                #print(f"{self.cache_duration}")
-        else:
-            with open(self.ttd_json, "w", encoding="utf-8") as file:
-                json.dump(self.cache_duration, file, indent=4)
-                #print("created ttd.json")
-#end init cache refresh times
+		self._load()
 
-    def cache_expired(self, cache_name: str) -> bool:
-        with open(self.ttd_json, "r", encoding="utf-8") as file:
-            self.cache_duration = json.load(file)
-            expire_cache = self.cache_duration[cache_name]
-            if expire_cache < time.time():
-                self.reset_cache(cache_name)
-                return True
-            else:
-                return False
-#end cache expired
+	#---------------------------------------------------------
+	def _default_cache(self):
 
-    def reset_cache(self, cache_name: str) -> None:
+		now = int(time.time())
 
-        cache_time = time.time() + self.SECTOR_CTIME
+		return {
+			name: now + seconds
+			for name, seconds in self.cache_times.items()
+		}
 
-        with open(self.ttd_json, "r+", encoding="utf-8") as file:
-            self.cache_duration = json.load(file)
-            self.cache_duration[cache_name] = cache_time
-            file.seek(0)#back to top of file
-            json.dump(self.cache_duration, file, indent=4)
-            file.close()
-    #end reset cache
+	#---------------------------------------------------------
+	def _load(self):
+
+		if not self.ttd_json.exists():
+			self.cache_duration = self._default_cache()
+			self._save()
+			return
+
+		try:
+			with open(self.ttd_json, "r", encoding="utf-8") as file:
+				self.cache_duration = json.load(file)
+
+		except (json.JSONDecodeError, OSError):
+			self.cache_duration = self._default_cache()
+			self._save()
+
+	#---------------------------------------------------------
+	def _save(self):
+
+		with open(self.ttd_json, "w", encoding="utf-8") as file:
+			json.dump(self.cache_duration, file, indent=4)
+
+	#---------------------------------------------------------
+	def cache_expired(self, cache_name):
+
+		self._load()
+
+		if cache_name not in self.cache_duration:
+			self.reset_cache(cache_name)
+			return True
+
+		if time.time() >= self.cache_duration[cache_name]:
+			self.reset_cache(cache_name)
+			return True
+
+		return False
+	#---------------------------------------------------------
+	def reset_cache(self, cache_name):
+
+		self._load()
+
+		seconds = self.cache_times.get(cache_name, 60)
+
+		self.cache_duration[cache_name] = int(time.time()) + seconds
+
+		self._save()
 
 #end class TimeToDie
 
-def load_sector()-> None:
-	print("Dummy method for testing")
 
 if __name__ == "__main__":
-    ttd = TimeToDie()
-    if ttd.cache_expired('SECTOR'):
-        load_sector()
-        ttd.reset_cache('SECTOR')
-    else:
-        print("cache not expired")
+
+	ttd = TimeToDie()
+
+	if ttd.cache_expired("HISTORY"):
+		print("expired")
+		ttd.reset_cache("HISTORY")
+	else:
+		print("cache valid")

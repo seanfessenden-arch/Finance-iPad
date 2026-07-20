@@ -1,7 +1,7 @@
-from db import DB
+from src.db import DB
 from stock_service import StockService
 from delete_stock import DeleteStockScreen
-from enums import Mode, Cache 
+from helper import Mode, Cache 
 
 from textual import on
 from textual.screen import ModalScreen
