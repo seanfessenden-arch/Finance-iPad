@@ -4,13 +4,13 @@ import json
 import requests
 from pathlib import Path
 
-from time_to_die import TimeToDie
-from helper import convert_epoch, percent_gain
+from utils.functions import convert_epoch, percent_gain
+from services.time_to_die import TimeToDie
 
 
 class YahooClient:
 
-    def __init__(self, data_dir="data"):
+    def __init__(self, data_dir="cache"):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.ttd = TimeToDie()

@@ -3,6 +3,7 @@ from textual.app import ComposeResult
 from textual.widgets import Button, Static, Label
 from textual.containers import Horizontal, Vertical, Container
 from textual.screen import ModalScreen
+
 class DeleteStockScreen(ModalScreen[bool]):
 
     def __init__(self, symbol: str):

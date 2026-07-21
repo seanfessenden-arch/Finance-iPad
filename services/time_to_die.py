@@ -9,7 +9,7 @@ class TimeToDie:
 
 	def __init__(self):
 
-		self.ttd_json = Path("ttd.json")
+		self.ttd_json = Path("cache/ttd.json")
 
 		self.cache_times = {
 			"SECTOR": 40,

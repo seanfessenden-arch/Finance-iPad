@@ -2,7 +2,7 @@
 
 import sqlite3 as lite
 from enum import Enum
-from helper import TransactionType, Stock
+from utils.classes import TransactionType, Stock
 
 class DB:
 

@@ -1,7 +1,7 @@
-from db import DB
-#from delete_stock import DeleteStockScreen
-from helper import Mode, Cache 
-from yahoo_client import YahooClient
+from utils.classes import Mode, Cache 
+from database.database import DB
+from services.yahoo_client import YahooClient
+from widgets.delete_stock import DeleteStockScreen
 
 from textual import on
 from textual.screen import ModalScreen
@@ -21,7 +21,7 @@ class StockTab(TabPane):
 
     def __init__(self):
         super().__init__("Stocks", id="stocks")
-        self.db = DB("portfolio.db")
+        self.db = DB("cache/portfolio.db")
         self.mode = Mode.NORMAL
         self.yc = YahooClient()
 #end init
@@ -124,7 +124,10 @@ class StockTab(TabPane):
             ticker = self.query_one("#value-input", Input).value
             self.db.add_stock(ticker.upper(), name.upper())
             footer = self.query_one("#footer-box", Static)
-            footer.update(f"Added: '{name}', '{ticker}'")
+
+            msg = f"Added: '{name}', '{ticker}'" if name else "Select a Stock for Price (Enter)"
+            footer.update(msg)
+
             self.query_one("#name-input", Input).value = ""
             self.query_one("#value-input", Input).value = ""
         self.refresh_stock_list()

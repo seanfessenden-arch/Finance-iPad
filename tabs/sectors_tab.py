@@ -12,9 +12,9 @@ from textual.app import App, ComposeResult
 from textual.containers import Grid, Vertical
 from textual.widgets import Label, TabPane, DataTable
 
-from time_to_die import TimeToDie
-from yahoo_client import YahooClient
-from helper import percent_gain
+from utils.functions import percent_gain
+from services.yahoo_client import YahooClient
+from services.time_to_die import TimeToDie
 
 class SectorsTab(TabPane):
     BINDINGS = [

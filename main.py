@@ -9,9 +9,9 @@ Row 4: spacer
 Row 5: DataTable (spans full width, edge to edge)
 Row 6: Static text with a border box (spans full width)
 """
-from stocks_tab import StockTab
-from portfolio_tab import PortfolioTab
-from sectors_tab import SectorsTab
+from tabs.stocks_tab import StockTab
+from tabs.portfolio_tab import PortfolioTab
+from tabs.sectors_tab import SectorsTab
 
 import traceback
 
@@ -25,7 +25,7 @@ from textual.widgets import (
 
 
 class FinanceApp(App):
-    CSS_PATH = "finance_app.tcss" 
+    CSS_PATH = "config/app.tcss" 
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
             Binding("ctrl+q", "quit", "Quit")
