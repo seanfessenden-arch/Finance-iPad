@@ -161,10 +161,10 @@ if __name__ == "__main__":
 
     y = YahooClient()
 
-    print(y.quote("AAPL"))
+    print(y.quote("AAPL")['price'])
     print(y.quotes(('MSFT','AAPL')))
     data = y.history("AAPL")
-    
+    ''' 
     oldest_price =0
     current_price = 0
     x = 0
@@ -178,3 +178,4 @@ if __name__ == "__main__":
             print(f"{curr_price} {percent_gain(old_price, curr_price)}")
         else:
             exit
+            '''

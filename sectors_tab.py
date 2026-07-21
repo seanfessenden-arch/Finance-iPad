@@ -25,14 +25,25 @@ class SectorsTab(TabPane):
         self.USE_CACHE = True
         self.today = datetime.now()
         self.client = YahooClient()
+        self.sort_descending = True
 
-            #"FCYIX":"Industrials",
         self.sectors = {
             "FSELX":"Semiconductors",
             "FSPTX":"Technology",
             "FSENX":"Energy",
+            "FENY":"Energy",
+            "FMAT":"Materials",
+            "FUTY":"Utilities",
+            "FREL":"Real Estate",
             "FSPHX":"Health Care",
             "FIDRX": "Industrials",
+            "FTEC": "Informtn Technology",
+            "FDIS": "Consumer Discret",
+            "FSTA": "Consumer Staples",
+            "FCOM": "Comunictn Services",
+            "FHLC": "Health Care",
+            "FNCL": "Financials",
+            "FIDU": "Industrials",
             "FIDSX":"Financial Services"
         }
 
@@ -68,11 +79,41 @@ class SectorsTab(TabPane):
             col.auto_width = False
 
             col.width = 27 if index==0 else 9
+        '''
+        def sort_percent(val):
+            try:
+                return float(val.replace("%", "").strip())
+            except ValueError:
+                return float('-inf')  # Put invalid or empty values at the bottom
+
+        sector_tbl.sort('col7', key=sort_percent)
+        '''
 
         sector_tbl.refresh()
-
         self.build_table()
 #end on mount
+
+    @on(DataTable.HeaderSelected, "#sector-table")
+    def on_header_clicked(self, event: DataTable.HeaderSelected):
+        # Check if the selected column key is 'col7' (the 20 Yr header)
+        if event.column_key.value in ('col7', 'col6', 'col5', 'col4', 'col3', 'col2', 'col1'):
+            sector_tbl = event.data_table
+            self.sort_descending = not self.sort_descending
+
+            def sort_percent(val):
+                try:
+                    return float(val.replace("%", "").strip())
+                except ValueError:
+                    return float('-inf')
+
+            # Toggles sorting direction if clicked multiple times, or defaults to descending
+            # for easy reading of highest performers.
+            sector_tbl.sort(
+                event.column_key,
+                key=sort_percent,
+                reverse=self.sort_descending
+            )
+            sector_tbl.refresh()
 
     def build_table(self):
         sector_tbl = self.query_one("#sector-table", DataTable)

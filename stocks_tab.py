@@ -1,7 +1,7 @@
-from src.db import DB
-from stock_service import StockService
-from delete_stock import DeleteStockScreen
+from db import DB
+#from delete_stock import DeleteStockScreen
 from helper import Mode, Cache 
+from yahoo_client import YahooClient
 
 from textual import on
 from textual.screen import ModalScreen
@@ -23,7 +23,7 @@ class StockTab(TabPane):
         super().__init__("Stocks", id="stocks")
         self.db = DB("portfolio.db")
         self.mode = Mode.NORMAL
-        self.ss = StockService()
+        self.yc = YahooClient()
 #end init
 
     def on_mount(self):
@@ -78,9 +78,10 @@ class StockTab(TabPane):
 
     def show_stock_price(self, event):
         sel_ticker = self.get_selected_symbol(event)
-        price = self.ss.price(sel_ticker)
+        price = self.yc.quote(sel_ticker)
+
         self.query_one("#footer-box", Static).update(
-        f"{sel_ticker} : ${price['close']:.2f}")
+        f"{sel_ticker} : ${price['price']:.2f}")
 #end show stock price
 
     def action_set_del_stock(self):
